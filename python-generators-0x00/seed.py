@@ -1,14 +1,15 @@
 import mysql.connector
 import csv
 import uuid
+import os
 
 # Connect to MySQL server
 def connect_db():
     try:
         connection = mysql.connector.connect(
             host="localhost",
-            user="root",
-            password="Linkwithaugustine@gmail.com"
+            user=os.getenv("DB_USER", "root"),
+            password=os.getenv("DB_PASSWORD", "Linkwithaugustine@gmail.com"),
         )
         return connection
     except mysql.connector.Error as err:
