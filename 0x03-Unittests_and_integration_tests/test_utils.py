@@ -32,7 +32,10 @@ class TestAccessNestedMap(unittest.TestCase):
         path,
         expected_message
     ) -> None:
-        """Test that access_nested_map raises KeyError with the correct message."""
+        """
+        Test that access_nested_map raises KeyError
+        with the correct message.
+        """
         with self.assertRaises(KeyError) as cm:
             access_nested_map(nested_map, path)
         self.assertEqual(
