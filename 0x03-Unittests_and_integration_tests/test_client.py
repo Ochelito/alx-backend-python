@@ -7,6 +7,7 @@ from client import GithubOrgClient
 from fixtures import org_payload, repos_payload, expected_repos, apache2_repos
 
 
+
 class TestGithubOrgClient(unittest.TestCase):
     """Unit tests for GithubOrgClient"""
 
@@ -91,16 +92,12 @@ class TestIntegrationGithubOrgClient(unittest.TestCase):
     def setUpClass(cls):
         """Start patcher for requests.get"""
         cls.get_patcher = patch("requests.get")
-
         mock_get = cls.get_patcher.start()
 
-        # Configure side_effect for different URLs
         def side_effect(url):
-            if url == GithubOrgClient.ORG_URL.format(
-                org=cls.org_payload["login"]
-            ):
+            if url == GithubOrgClient.ORG_URL.format(org=cls.org_payload["login"]):
                 return MockResponse(cls.org_payload)
-            elif url == cls.org_payload["repos_url"]:
+            if url == cls.org_payload["repos_url"]:
                 return MockResponse(cls.repos_payload)
             return MockResponse(None)
 
