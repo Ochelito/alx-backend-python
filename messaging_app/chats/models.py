@@ -1,6 +1,6 @@
 import uuid
 from django.db import models
-from django.contrib.auth.models import AbstractUser
+from django.contrib.auth.models import AbstractUser, Group, Permission
 from django.utils import timezone
 
 # -----------------------------
@@ -31,6 +31,18 @@ class User(AbstractUser):
     role = models.CharField(max_length=10, choices=USER_ROLES, default='guest')
     created_at = models.DateTimeField(default=timezone.now)
 
+    # Override default reverse accessors to avoid clashes
+    groups = models.ManyToManyField(
+        Group,
+        related_name="custom_user_set",   # avoids clash with auth.User.groups
+        blank=True
+    )
+    user_permissions = models.ManyToManyField(
+        Permission,
+        related_name="custom_user_set",   # avoids clash with auth.User.user_permissions
+        blank=True
+    )
+
     REQUIRED_FIELDS = ['email', 'first_name', 'last_name']
 
     @property
@@ -41,6 +53,8 @@ class User(AbstractUser):
         """
         return self.password
 
+    def __str__(self):
+        return f"{self.first_name} {self.last_name}"
 
 # -----------------------------
 # 2. Conversation Model
