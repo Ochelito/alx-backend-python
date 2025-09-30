@@ -19,6 +19,10 @@ from django.urls import path, include
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    # All API routes are nested under /api/
-    path('api/', include('chats.urls')),  # includes conversations and messages routes
+
+    # All API routes (conversations/messages)
+    path('api/', include('chats.urls')),
+
+    # Browsable API login/logout (api-auth/)
+    path('api-auth/', include('rest_framework.urls')),
 ]
