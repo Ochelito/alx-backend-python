@@ -19,5 +19,6 @@ from django.urls import path, include
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    path('api/v1/', include('chats.urls')),  # ✅ now loads routes from chats app
+    # All API routes are nested under /api/
+    path('api/', include('chats.urls')),  # includes conversations and messages routes
 ]
