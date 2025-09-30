@@ -1,4 +1,4 @@
-from rest_framework import viewsets, status
+from rest_framework import viewsets, status, filters
 from rest_framework.response import Response
 from rest_framework.decorators import action
 from django.shortcuts import get_object_or_404
@@ -10,15 +10,16 @@ from .serializers import ConversationSerializer, MessageSerializer
 class ConversationViewSet(viewsets.ModelViewSet):
     """
     ViewSet for managing conversations.
-    Supports listing, retrieving, creating, and adding participants/messages.
+    Allows listing, retrieving, creating conversations,
+    and sending messages to an existing conversation.
     """
     queryset = Conversation.objects.all().prefetch_related("participants", "messages")
     serializer_class = ConversationSerializer
+    filter_backends = [filters.SearchFilter]
+    search_fields = ["participants__first_name", "participants__last_name", "participants__email"]
 
     def create(self, request, *args, **kwargs):
-        """
-        Create a new conversation with participants.
-        """
+        """Create a new conversation with participants."""
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         conversation = serializer.save()
@@ -31,7 +32,7 @@ class ConversationViewSet(viewsets.ModelViewSet):
     def add_message(self, request, pk=None):
         """
         Custom action: Send a message to this conversation.
-        POST /conversations/{id}/add_message/
+        Example: POST /conversations/{id}/add_message/
         """
         conversation = self.get_object()
         data = request.data.copy()
@@ -47,10 +48,12 @@ class ConversationViewSet(viewsets.ModelViewSet):
 class MessageViewSet(viewsets.ModelViewSet):
     """
     ViewSet for managing messages.
-    Supports listing all messages or filtering by conversation.
+    Allows listing all messages or filtering by conversation.
     """
     queryset = Message.objects.all().select_related("sender", "conversation")
     serializer_class = MessageSerializer
+    filter_backends = [filters.SearchFilter]
+    search_fields = ["message_body", "sender__first_name", "sender__last_name"]
 
     def list(self, request, *args, **kwargs):
         """
