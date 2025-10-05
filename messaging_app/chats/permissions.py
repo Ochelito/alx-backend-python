@@ -1,28 +1,46 @@
 from rest_framework import permissions
-from .models import Conversation
+from .models import Conversation, Message
 
 
-class IsParticipantOfConversation(permissions.BasePermission):
+class IsParticipantOrReadOnly(permissions.BasePermission):
     """
-    Custom permission:
-    - Only authenticated users
-    - Only participants of a conversation can access/modify it
+    Only participants of a conversation can view, update, or delete it.
     """
 
     def has_permission(self, request, view):
-        # User must be authenticated
+        # All API endpoints require authentication
         return request.user and request.user.is_authenticated
 
     def has_object_permission(self, request, view, obj):
-        """
-        obj can be a Conversation or a Message.
-        - Allow access only if request.user is a participant.
-        """
         if isinstance(obj, Conversation):
-            return request.user in obj.participants.all()
+            # Read-only methods: GET, HEAD, OPTIONS
+            if request.method in permissions.SAFE_METHODS:
+                return request.user in obj.participants.all()
 
-        # If obj is a Message, check conversation participants
-        if hasattr(obj, "conversation"):
-            return request.user in obj.conversation.participants.all()
+            # Explicitly handle modification methods
+            if request.method in ["PUT", "PATCH", "DELETE"]:
+                return request.user in obj.participants.all()
+
+        return False
+
+
+class IsSenderOrReadOnly(permissions.BasePermission):
+    """
+    Only participants can read messages,
+    but only the sender can update or delete their own messages.
+    """
+
+    def has_permission(self, request, view):
+        return request.user and request.user.is_authenticated
+
+    def has_object_permission(self, request, view, obj):
+        if isinstance(obj, Message):
+            # Safe read-only methods (GET, HEAD, OPTIONS)
+            if request.method in permissions.SAFE_METHODS:
+                return request.user in obj.conversation.participants.all()
+
+            # Only the sender can modify their message
+            if request.method in ["PUT", "PATCH", "DELETE"]:
+                return obj.sender == request.user
 
         return False
