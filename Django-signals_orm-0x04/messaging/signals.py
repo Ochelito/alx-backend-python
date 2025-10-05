@@ -15,7 +15,7 @@ def create_notification(sender, instance, created, **kwargs):
 @receiver(pre_save, sender=Message)
 def log_message_edit(sender, instance, **kwargs):
     """Log old message content before it is updated."""
-    if instance.pk:  # means this is an update, not a new message
+    if instance.pk:  # update (not new message)
         old_instance = Message.objects.get(pk=instance.pk)
         if old_instance.content != instance.content:
             # Save old content to history
@@ -26,3 +26,7 @@ def log_message_edit(sender, instance, **kwargs):
             # Mark message as edited
             instance.edited = True
 
+            # Optional: set edited_by if instance has this info
+            # Example: assume you pass instance._edited_by in view
+            if hasattr(instance, '_edited_by'):
+                instance.edited_by = instance._edited_by

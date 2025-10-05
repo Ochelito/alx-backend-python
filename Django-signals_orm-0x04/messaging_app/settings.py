@@ -39,6 +39,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'rest_framework', # Django REST framework
     'chats',      # Chats app
+    'messaging',
 ]
 
 AUTH_USER_MODEL = "chats.User"
