@@ -1,32 +1,36 @@
 from rest_framework import viewsets, status, filters
 from rest_framework.response import Response
 from rest_framework.decorators import action
+from rest_framework.permissions import IsAuthenticated
+
 from django.shortcuts import get_object_or_404
 
 from .models import Conversation, Message
 from .serializers import ConversationSerializer, MessageSerializer
+from .permissions import IsParticipantOrReadOnly, IsSenderOrReadOnly
 
 
 class ConversationViewSet(viewsets.ModelViewSet):
     """
     ViewSet for managing conversations.
-    Allows listing, retrieving, creating conversations,
-    and sending messages to an existing conversation.
+    Only participants can view or update their conversations.
     """
-    queryset = Conversation.objects.all().prefetch_related("participants", "messages")
     serializer_class = ConversationSerializer
     filter_backends = [filters.SearchFilter]
     search_fields = ["participants__first_name", "participants__last_name", "participants__email"]
+    permission_classes = [IsAuthenticated, IsParticipantOrReadOnly]
 
-    def create(self, request, *args, **kwargs):
-        """Create a new conversation with participants."""
-        serializer = self.get_serializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        conversation = serializer.save()
-        return Response(
-            ConversationSerializer(conversation).data,
-            status=status.HTTP_201_CREATED
+    def get_queryset(self):
+        """Limit conversations to those the current user participates in."""
+        return Conversation.objects.filter(participants=self.request.user).prefetch_related(
+            "participants", "messages"
         )
+
+    def perform_create(self, serializer):
+        """Add the requesting user as a participant in the new conversation."""
+        conversation = serializer.save()
+        conversation.participants.add(self.request.user)
+        return conversation
 
     @action(detail=True, methods=['post'])
     def add_message(self, request, pk=None):
@@ -35,12 +39,20 @@ class ConversationViewSet(viewsets.ModelViewSet):
         Example: POST /conversations/{id}/add_message/
         """
         conversation = self.get_object()
+
+        # Ensure the requesting user is a participant
+        if request.user not in conversation.participants.all():
+            return Response(
+                {"detail": "You are not a participant in this conversation."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
         data = request.data.copy()
         data["conversation"] = str(conversation.conversation_id)
 
         serializer = MessageSerializer(data=data)
         serializer.is_valid(raise_exception=True)
-        serializer.save(conversation=conversation)
+        serializer.save(conversation=conversation, sender=request.user)
 
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
@@ -48,20 +60,19 @@ class ConversationViewSet(viewsets.ModelViewSet):
 class MessageViewSet(viewsets.ModelViewSet):
     """
     ViewSet for managing messages.
-    Allows listing all messages or filtering by conversation.
+    Users only see messages in conversations they belong to.
     """
-    queryset = Message.objects.all().select_related("sender", "conversation")
     serializer_class = MessageSerializer
     filter_backends = [filters.SearchFilter]
     search_fields = ["message_body", "sender__first_name", "sender__last_name"]
+    permission_classes = [IsAuthenticated, IsSenderOrReadOnly]
 
-    def list(self, request, *args, **kwargs):
-        """
-        Optionally filter messages by conversation_id:
-        GET /messages/?conversation_id=<uuid>
-        """
-        conversation_id = request.query_params.get("conversation_id")
-        if conversation_id:
-            self.queryset = self.queryset.filter(conversation_id=conversation_id)
+    def get_queryset(self):
+        """Show only messages from conversations where the user is a participant."""
+        return Message.objects.filter(conversation__participants=self.request.user).select_related(
+            "sender", "conversation"
+        )
 
-        return super().list(request, *args, **kwargs)
+    def perform_create(self, serializer):
+        """Force the sender to be the logged-in user."""
+        serializer.save(sender=self.request.user)
