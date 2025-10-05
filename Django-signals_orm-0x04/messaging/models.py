@@ -8,11 +8,16 @@ class Message(models.Model):
     timestamp = models.DateTimeField(auto_now_add=True)
     edited = models.BooleanField(default=False)
     edited_by = models.ForeignKey(
-        User,
-        related_name="edited_messages",
-        on_delete=models.SET_NULL,
-        null=True,     # allows messages that haven’t been edited
-        blank=True     # optional in forms
+        User, related_name="edited_messages", null=True, blank=True, on_delete=models.SET_NULL
+    )
+    
+    # NEW: Self-referential FK for threaded replies
+    parent_message = models.ForeignKey(
+        "self",
+        related_name="replies",
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE
     )
 
     def __str__(self):
