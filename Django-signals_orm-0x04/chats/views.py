@@ -2,7 +2,8 @@ from rest_framework import viewsets, status, filters
 from rest_framework.response import Response
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
-
+from django.views.decorators.cache import cache_page
+from django.utils.decorators import method_decorator
 from .models import Conversation, Message
 from .serializers import ConversationSerializer, MessageSerializer
 from .permissions import IsParticipantOrReadOnly, IsSenderOrReadOnly
@@ -45,6 +46,13 @@ class ConversationViewSet(viewsets.ModelViewSet):
 
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
+    # ----------------------------
+    # Cache the conversation retrieve view
+    # ----------------------------
+    @method_decorator(cache_page(60))  # cache for 60 seconds
+    def retrieve(self, request, *args, **kwargs):
+        return super().retrieve(request, *args, **kwargs)
+
 
 class MessageViewSet(viewsets.ModelViewSet):
     serializer_class = MessageSerializer
@@ -56,9 +64,20 @@ class MessageViewSet(viewsets.ModelViewSet):
     ordering_fields = ["sent_at"]
 
     def get_queryset(self):
+        # Only messages where the user is a participant
         return Message.objects.filter(conversation__participants=self.request.user).select_related(
             "sender", "conversation"
         )
 
     def perform_create(self, serializer):
         serializer.save(sender=self.request.user)
+
+    # ----------------------------------------
+    # Cache the list of messages for 60 seconds
+    # ----------------------------------------
+    @method_decorator(cache_page(60))
+    def list(self, request, *args, **kwargs):
+        """
+        Cached message list view (Task 5 requirement)
+        """
+        return super().list(request, *args, **kwargs)
