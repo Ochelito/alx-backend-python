@@ -1,5 +1,6 @@
 from django.db import models
 from django.contrib.auth.models import User
+from .managers import UnreadMessagesManager  # import the custom manager
 
 class UnreadMessagesManager(models.Manager):
     """Custom manager to fetch unread messages for a user."""
@@ -18,15 +19,14 @@ class Message(models.Model):
     parent_message = models.ForeignKey(
         "self", related_name="replies", null=True, blank=True, on_delete=models.CASCADE
     )
-    read = models.BooleanField(default=False)  # New field to track if message is read
+    read = models.BooleanField(default=False)
 
-    # Add custom manager
-    objects = models.Manager()  # default manager
-    unread = UnreadMessagesManager()  # custom manager
+    # Managers
+    objects = models.Manager()          # default manager
+    unread = UnreadMessagesManager()    # custom manager
 
     def __str__(self):
         return f"From {self.sender} to {self.receiver} (edited: {self.edited}, read: {self.read})"
-
 
 class Notification(models.Model):
     user = models.ForeignKey(User, related_name="notifications", on_delete=models.CASCADE)

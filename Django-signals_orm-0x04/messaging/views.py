@@ -54,10 +54,8 @@ def inbox_view(request):
 
 @login_required
 def unread_inbox_view(request):
-    """
-    Display unread messages for the logged-in user.
-    """
-    unread_messages = Message.unread.for_user(request.user).select_related('sender')
+    # Fetch unread messages efficiently
+    unread_messages = Message.unread.unread_for_user(request.user).select_related('sender')
     
     return render(request, "messaging/unread_inbox.html", {"messages": unread_messages})
 
