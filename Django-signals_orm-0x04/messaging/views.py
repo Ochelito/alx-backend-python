@@ -52,10 +52,18 @@ def inbox_view(request):
 
     return render(request, "messaging/inbox.html", {"messages": messages})
 
+
 @login_required
 def unread_inbox_view(request):
-    # Fetch unread messages efficiently
-    unread_messages = Message.unread.unread_for_user(request.user).select_related('sender')
+    """
+    Display unread messages for the logged-in user.
+    Optimized with select_related and only() directly in the view.
+    """
+    unread_messages = (
+        Message.unread.unread_for_user(request.user)
+        .select_related('sender')  # avoid extra queries for sender FK
+        .only('id', 'sender', 'content', 'timestamp', 'parent_message')  # fetch only necessary fields
+    )
     
     return render(request, "messaging/unread_inbox.html", {"messages": unread_messages})
 
