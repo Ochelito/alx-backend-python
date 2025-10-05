@@ -1,8 +1,10 @@
-from django.shortcuts import get_object_or_404, redirect
+from django.shortcuts import get_object_or_404, redirect, render
 from django.contrib.auth.decorators import login_required
 from .models import Message, User
 from django.contrib import messages
-from django.shortcuts import render
+from django.views.decorators.cache import cache_page
+from django.utils.decorators import method_decorator
+
 
 @login_required
 def send_message(request, receiver_id, parent_id=None):
@@ -36,24 +38,26 @@ def send_message(request, receiver_id, parent_id=None):
     # If GET request, show form
     return render(request, "messaging/send_message.html", {"receiver_id": receiver_id})
 
+
 @login_required
+@cache_page(60)  # Task 5: Cache inbox view for 60 seconds
 def inbox_view(request):
     """
     Show all messages for the logged-in user, including threaded replies.
     Optimized with select_related and prefetch_related.
     """
-    # Fetch messages where the user is sender or receiver
-    messages = (
+    messages_qs = (
         Message.objects.filter(receiver=request.user)
         .select_related('sender', 'receiver')         # avoid extra queries for FK
         .prefetch_related('replies__sender')         # fetch replies and their senders
         .order_by('-timestamp')
     )
 
-    return render(request, "messaging/inbox.html", {"messages": messages})
+    return render(request, "messaging/inbox.html", {"messages": messages_qs})
 
 
 @login_required
+@cache_page(60)  # Optional: Cache unread inbox as well
 def unread_inbox_view(request):
     """
     Display unread messages for the logged-in user.
@@ -66,6 +70,7 @@ def unread_inbox_view(request):
     )
     
     return render(request, "messaging/unread_inbox.html", {"messages": unread_messages})
+
 
 @login_required
 def read_message_view(request, msg_id):
