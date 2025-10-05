@@ -41,6 +41,8 @@ INSTALLED_APPS = [
     'chats',      # Chats app
 ]
 
+AUTH_USER_MODEL = "chats.User"
+
 # messaging_app/settings.py
 
 REST_FRAMEWORK = {
@@ -71,9 +73,11 @@ MIDDLEWARE = [
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 
-    # Custom logging middleware
+    # Custom middlewares
     "chats.middleware.RequestLoggingMiddleware",
     "chats.middleware.RestrictAccessByTimeMiddleware",
+    "chats.middleware.OffensiveLanguageMiddleware",
+    "chats.middleware.RolePermissionMiddleware",
 ]
 
 ROOT_URLCONF = 'messaging_app.urls'

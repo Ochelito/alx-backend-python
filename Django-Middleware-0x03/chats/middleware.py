@@ -1,109 +1,171 @@
-import logging
-from datetime import datetime, timedelta
-from django.http import HttpResponseForbidden
-from collections import defaultdict
+import os
+from datetime import datetime
+from datetime import time as dt_time 
+from django.utils import timezone
+from django.http import HttpResponse, HttpResponseForbidden
+from collections import deque
+import threading
+from datetime import timedelta
 
-# Configure logging to write to requests.log
-logger = logging.getLogger(__name__)
-file_handler = logging.FileHandler("requests.log")
-formatter = logging.Formatter("%(message)s")
-file_handler.setFormatter(formatter)
-logger.addHandler(file_handler)
-logger.setLevel(logging.INFO)
-
+from django.conf import settings
 
 class RequestLoggingMiddleware:
-    """
-    Middleware to log each request with timestamp, user, and request path.
-    """
+    # One-time configuration and initialization.
 
     def __init__(self, get_response):
         self.get_response = get_response
+        base = getattr(settings, "BASE_DIR", os.getcwd())
+        self.log_path = os.path.join(str(base), "requests.log")
 
     def __call__(self, request):
-        user = request.user if request.user.is_authenticated else "Anonymous"
-        log_message = f"{datetime.now()} - User: {user} - Path: {request.path}"
-        logger.info(log_message)
-        return self.get_response(request)
+        # Code to be executed for each request before
+        # the view (and later middleware) are called.
+        user = getattr(request, "user", None)
+        # prefer email, fall back to username, then Anonymous
+        user_str = getattr(user, "email", None) or getattr(user, "username", None) or "Anonymous"
 
+        line = f'{datetime.now().isoformat(timespec="seconds")} - User: {user_str} - Path: {request.path}\n'
+        try:
+            with open(self.log_path, "a", encoding="utf-8") as f:
+                f.write(line)
+        except Exception:
+            # Never break requests because of logging errors
+            pass
 
+        response = self.get_response(request)
+
+        # Code to be executed for each request/response after
+        # the view is called.
+
+        return response
+    
 class RestrictAccessByTimeMiddleware:
     """
-    Middleware to restrict access to the chat app outside working hours.
-    Allowed time: 06:00 - 21:00 (6AM - 9PM).
+    Deny access to messaging endpoints outside 6PM–9PM (server local time).
+
+    Works only on messaging endpoints (conversations/messages) so admin and other routes still work.
+    Returns 403 Forbidden when outside the allowed window.
     """
 
     def __init__(self, get_response):
         self.get_response = get_response
+        # Allowed window (inclusive) in local server time
+
+        self.start = dt_time(18, 0) # 6:00 PM
+        self.end = dt_time(21, 0) # 9:00 PM
+
+        # Limit to messaging endpoints only
+        self._scoped_prefixes = (
+            "/api/conversations",
+            "/api/messages",
+        )
+
 
     def __call__(self, request):
-        current_hour = datetime.now().hour
-        if current_hour < 6 or current_hour >= 21:
-            return HttpResponseForbidden(
-                "⛔ Access restricted: Chats are only available between 6AM and 9PM."
-            )
+        if request.path.startswith(self._scoped_prefixes):
+            # restriction logic 
+            now = timezone.localtime().time()
+            # allow only between 18:00 and 21:00 (inclusive)
+            in_window = self.start <= now <= self.end
+            if not in_window:
+                return HttpResponseForbidden(
+                    "Access to messaging is allowed between 6:00 PM and 9:00 PM."
+                )
         return self.get_response(request)
-
-
+    
+        
 class OffensiveLanguageMiddleware:
     """
-    Middleware to rate-limit chat messages by IP.
-    Restricts to 5 POST requests per minute per IP.
+    (Rate limiting by IP; “offensive language” task text, but requirement is per-IP throttling.)
+    Blocks sending more than LIMIT messages within WINDOW seconds per client IP.
+
+    Counted as a "message send" when:
+      - POST to any path that ends with "/send/"  (e.g., /api/conversations/<id>/send/)
+      - POST to any path that contains "/messages" (e.g., /api/messages/ or /api/conversations/<id>/messages/)
     """
 
-    ip_request_log = defaultdict(list)
+    LIMIT = 5
+    WINDOW_SECONDS = 60
+
+    # in-process store: { ip: deque[timestamps] }
+    _store = {}
+    _lock = threading.Lock()
 
     def __init__(self, get_response):
         self.get_response = get_response
 
+    def _get_client_ip(self, request) -> str:
+        xff = request.META.get("HTTP_X_FORWARDED_FOR")
+        if xff:
+            # take first address in X-Forwarded-For
+            return xff.split(",")[0].strip()
+        return request.META.get("REMOTE_ADDR", "0.0.0.0")
+
     def __call__(self, request):
-        client_ip = self.get_client_ip(request)
+        path = request.path or ""
+        method = (request.method or "").upper()
 
-        if request.method == "POST" and "/messages" in request.path:
-            now = datetime.now()
-            window_start = now - timedelta(minutes=1)
+        # Only count message POSTs
+        is_message_post = (
+            method == "POST"
+            and path.startswith("/api/")
+            and (path.endswith("/send/") or "/messages" in path)
+        )
 
-            self.ip_request_log[client_ip] = [
-                ts for ts in self.ip_request_log[client_ip] if ts > window_start
-            ]
+        if is_message_post:
+            ip = self._get_client_ip(request)
+            now = timezone.now().timestamp()
+            cutoff = now - self.WINDOW_SECONDS
 
-            if len(self.ip_request_log[client_ip]) >= 5:
-                return HttpResponseForbidden(
-                    "🚫 Rate limit exceeded: You can only send 5 messages per minute."
-                )
+            with self._lock:
+                dq = self._store.get(ip)
+                if dq is None:
+                    dq = deque()
+                    self._store[ip] = dq
 
-            self.ip_request_log[client_ip].append(now)
+                # prune old timestamps
+                while dq and dq[0] < cutoff:
+                    dq.popleft()
+
+                if len(dq) >= self.LIMIT:
+                    # 429 Too Many Requests (use 403 if your checker requires it)
+                    retry_after = int(self.WINDOW_SECONDS)
+                    resp = HttpResponse(
+                        f"Rate limit exceeded: max {self.LIMIT} messages per {self.WINDOW_SECONDS}s per IP.",
+                        status=429,
+                    )
+                    resp["Retry-After"] = str(retry_after)
+                    return resp
+
+                dq.append(now)
 
         return self.get_response(request)
-
-    @staticmethod
-    def get_client_ip(request):
-        x_forwarded_for = request.META.get("HTTP_X_FORWARDED_FOR")
-        if x_forwarded_for:
-            return x_forwarded_for.split(",")[0]
-        return request.META.get("REMOTE_ADDR", "unknown")
-
-
-class RolePermissionMiddleware:
+    
+class RolepermissionMiddleware:
     """
-    Middleware to enforce role-based access for chats.
-    Only users with role 'admin' or 'moderator' can access restricted endpoints.
-    """
+    Allow only admins (and moderators, if that role exists) to perform
+    modification actions on messaging resources.
 
+    We scope this to the messaging API and to *unsafe* methods:
+      - PUT, PATCH, DELETE on /api/messages* or /api/conversations*
+    """
     def __init__(self, get_response):
         self.get_response = get_response
+        self._protected_prefixes = ("/api/messages", "/api/conversations")
+        self._protected_methods = ("PUT", "PATCH", "DELETE")
 
     def __call__(self, request):
-        # Define restricted paths (could also use regex for patterns)
-        restricted_paths = ["/admin-only/", "/moderator-actions/"]
+        path = request.path or ""
+        method = (request.method or "").upper()
 
-        if any(path in request.path for path in restricted_paths):
-            if not request.user.is_authenticated:
-                return HttpResponseForbidden("❌ Access denied: You must log in.")
+        should_check = path.startswith(self._protected_prefixes) and method in self._protected_methods
+        if should_check:
+            user = getattr(request, "user", None)
+            role = getattr(user, "role", None)
+            is_authed = bool(user and getattr(user, "is_authenticated", False))
+            is_allowed_role = role in ("admin", "moderator")  # 'moderator' optional, see note below
 
-            if getattr(request.user, "role", None) not in ["admin", "moderator"]:
-                return HttpResponseForbidden(
-                    "🚫 Access denied: Only admins or moderators can perform this action."
-                )
+            if not (is_authed and is_allowed_role):
+                return HttpResponseForbidden("Only admin or moderator may modify or delete messaging resources.")
 
         return self.get_response(request)
