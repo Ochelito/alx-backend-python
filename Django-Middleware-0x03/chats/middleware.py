@@ -1,6 +1,7 @@
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from django.http import HttpResponseForbidden
+from collections import defaultdict
 
 # Configure logging to write to requests.log
 logger = logging.getLogger(__name__)
@@ -47,8 +48,53 @@ class RestrictAccessByTimeMiddleware:
         # Block access if time is outside allowed range
         if current_hour < 6 or current_hour >= 21:
             return HttpResponseForbidden(
-                " Access restricted: Chats are only available between 6AM and 9PM."
+                "⛔ Access restricted: Chats are only available between 6AM and 9PM."
             )
 
         # Otherwise continue request cycle
         return self.get_response(request)
+
+
+class OffensiveLanguageMiddleware:
+    """
+    Middleware to rate-limit chat messages by IP.
+    Restricts to 5 POST requests per minute per IP.
+    """
+
+    # Store request timestamps per IP
+    ip_request_log = defaultdict(list)
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        client_ip = self.get_client_ip(request)
+
+        # Only rate-limit POST requests to message endpoints
+        if request.method == "POST" and "/messages" in request.path:
+            now = datetime.now()
+            window_start = now - timedelta(minutes=1)
+
+            # Clean old entries
+            self.ip_request_log[client_ip] = [
+                ts for ts in self.ip_request_log[client_ip] if ts > window_start
+            ]
+
+            # Check if limit exceeded
+            if len(self.ip_request_log[client_ip]) >= 5:
+                return HttpResponseForbidden(
+                    "🚫 Rate limit exceeded: You can only send 5 messages per minute."
+                )
+
+            # Record this request timestamp
+            self.ip_request_log[client_ip].append(now)
+
+        return self.get_response(request)
+
+    @staticmethod
+    def get_client_ip(request):
+        """Helper to extract client IP safely."""
+        x_forwarded_for = request.META.get("HTTP_X_FORWARDED_FOR")
+        if x_forwarded_for:
+            return x_forwarded_for.split(",")[0]
+        return request.META.get("REMOTE_ADDR", "unknown")
