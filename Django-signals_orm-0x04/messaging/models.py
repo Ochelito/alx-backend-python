@@ -1,6 +1,11 @@
 from django.db import models
 from django.contrib.auth.models import User
 
+class UnreadMessagesManager(models.Manager):
+    """Custom manager to fetch unread messages for a user."""
+    def for_user(self, user):
+        return self.filter(receiver=user, read=False).only('id', 'sender', 'content', 'timestamp', 'parent_message')
+
 class Message(models.Model):
     sender = models.ForeignKey(User, related_name="sent_messages", on_delete=models.CASCADE)
     receiver = models.ForeignKey(User, related_name="received_messages", on_delete=models.CASCADE)
@@ -10,18 +15,17 @@ class Message(models.Model):
     edited_by = models.ForeignKey(
         User, related_name="edited_messages", null=True, blank=True, on_delete=models.SET_NULL
     )
-    
-    # NEW: Self-referential FK for threaded replies
     parent_message = models.ForeignKey(
-        "self",
-        related_name="replies",
-        null=True,
-        blank=True,
-        on_delete=models.CASCADE
+        "self", related_name="replies", null=True, blank=True, on_delete=models.CASCADE
     )
+    read = models.BooleanField(default=False)  # New field to track if message is read
+
+    # Add custom manager
+    objects = models.Manager()  # default manager
+    unread = UnreadMessagesManager()  # custom manager
 
     def __str__(self):
-        return f"From {self.sender} to {self.receiver} (edited: {self.edited})"
+        return f"From {self.sender} to {self.receiver} (edited: {self.edited}, read: {self.read})"
 
 
 class Notification(models.Model):

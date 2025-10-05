@@ -2,6 +2,7 @@ from django.shortcuts import get_object_or_404, redirect
 from django.contrib.auth.decorators import login_required
 from .models import Message, User
 from django.contrib import messages
+from django.shortcuts import render
 
 @login_required
 def send_message(request, receiver_id, parent_id=None):
@@ -50,3 +51,20 @@ def inbox_view(request):
     )
 
     return render(request, "messaging/inbox.html", {"messages": messages})
+
+@login_required
+def unread_inbox_view(request):
+    """
+    Display unread messages for the logged-in user.
+    """
+    unread_messages = Message.unread.for_user(request.user).select_related('sender')
+    
+    return render(request, "messaging/unread_inbox.html", {"messages": unread_messages})
+
+@login_required
+def read_message_view(request, msg_id):
+    message = Message.objects.select_related('sender').get(id=msg_id)
+    if message.receiver == request.user and not message.read:
+        message.read = True
+        message.save(update_fields=['read'])  # only update the read field
+    return render(request, "messaging/message_detail.html", {"message": message})
