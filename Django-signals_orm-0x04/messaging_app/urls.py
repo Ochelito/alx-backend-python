@@ -26,6 +26,8 @@ urlpatterns = [
 
     # All API routes (conversations/messages)
     path('api/', include('chats.urls')),
+    
+    path('messaging/', include('messaging.urls')),  # Include messaging app URLs
 
     # Browsable API login/logout (api-auth/)
     path('api-auth/', include('rest_framework.urls', namespace='rest_framework')),
