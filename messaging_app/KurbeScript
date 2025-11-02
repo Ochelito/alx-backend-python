@@ -1,11 +1,3 @@
 #!/usr/bin/env bash
-# Start a local Kubernetes cluster using Minikube
-
-echo "🚀 Starting Minikube cluster..."
 minikube start
-
-echo "✅ Checking cluster status..."
-kubectl cluster-info
-
-echo "📦 Listing pods in all namespaces..."
-kubectl get pods --all-namespaces
+kubectl cluster-info && kubectl get pods --all-namespaces
