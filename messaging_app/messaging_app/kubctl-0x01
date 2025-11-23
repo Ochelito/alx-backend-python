@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+
+# Task 2: Scale the Django App Using Kubernetes
+
+# Scale the Django messaging app deployment to 3 replicas
+echo "Scaling deployment to 3 replicas..."
+kubectl scale deployment messaging-app-deployment --replicas=3
+
+# Verify that multiple pods are running
+echo "Checking running pods..."
+kubectl get pods
+
+# Perform load testing using wrk
+# NOTE: Your app must be reachable (e.g., via port-forward or NodePort)
+echo "Running load test with wrk..."
+wrk -t4 -c50 -d10s http://localhost:8000/
+
+# Monitor resource usage for pods
+echo "Monitoring resource usage..."
+kubectl top pods
