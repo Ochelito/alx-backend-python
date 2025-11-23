@@ -46,7 +46,7 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install pytest pytest-django mysqlclient
+        pip install pytest pytest-django pytest-html pytest-cov flake8 mysqlclient
         pip install -r messaging_app/requirements.txt || echo "No requirements.txt found"
 
     - name: Wait for MySQL to be ready
@@ -57,7 +57,12 @@ jobs:
           sleep 2
         done
 
-    - name: Run Django tests
+    - name: Run flake8 for linting
+      run: |
+        echo "🔹 Running flake8..."
+        flake8 messaging_app || exit 1
+
+    - name: Run Django tests with coverage
       run: |
         export DJANGO_DB_NAME=$DATABASE_NAME
         export DJANGO_DB_USER=$DATABASE_USER
@@ -66,10 +71,16 @@ jobs:
         export DJANGO_DB_PORT=$DATABASE_PORT
         cd messaging_app
         python manage.py migrate
-        pytest --html=report.html --self-contained-html
+        pytest --cov=. --cov-report=xml --html=report.html --self-contained-html
 
     - name: Upload test report
       uses: actions/upload-artifact@v3
       with:
         name: pytest-report
         path: messaging_app/report.html
+
+    - name: Upload coverage report
+      uses: actions/upload-artifact@v3
+      with:
+        name: coverage-report
+        path: messaging_app/coverage.xml
