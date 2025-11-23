@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+
+echo "Applying BLUE deployment..."
+kubectl apply -f blue_deployment.yaml
+
+echo "Applying GREEN deployment..."
+kubectl apply -f green_deployment.yaml
+
+echo "Applying service..."
+kubectl apply -f kubeservice.yaml
+
+echo "Checking pods..."
+kubectl get pods -o wide
+
+echo "Showing logs for GREEN deployment pods..."
+GREEN_POD=$(kubectl get pods -l version=green -o jsonpath="{.items[0].metadata.name}")
+kubectl logs "$GREEN_POD"
+
+echo "If no errors, you can scale down BLUE manually:"
+echo "kubectl scale deployment messaging-app-blue --replicas=0"
