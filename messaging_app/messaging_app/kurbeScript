@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# This script starts Minikube, verifies Kubernetes cluster status,
+# and retrieves all pods in all namespaces.
+
+# Start local Kubernetes cluster
+minikube start
+
+# Verify that the cluster is running
+kubectl cluster-info
+
+# Retrieve available pods
+kubectl get pods --all-namespaces
