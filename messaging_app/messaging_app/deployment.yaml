@@ -1,0 +1,38 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: messaging-app-deployment
+  labels:
+    app: messaging-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: messaging-app
+  template:
+    metadata:
+      labels:
+        app: messaging-app
+    spec:
+      containers:
+        - name: messaging-app
+          image: idoko/messaging_app:latest   # <-- replace with your actual Docker image
+          ports:
+            - containerPort: 8000
+          env:
+            - name: DJANGO_SETTINGS_MODULE
+              value: "messaging_app.settings"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: messaging-app-service
+  labels:
+    app: messaging-app
+spec:
+  type: ClusterIP        # internal service only
+  selector:
+    app: messaging-app
+  ports:
+    - port: 8000         # service port
+      targetPort: 8000   # Django container port
