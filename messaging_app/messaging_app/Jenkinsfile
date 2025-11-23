@@ -3,14 +3,16 @@ pipeline {
 
     environment {
         GITHUB_CREDENTIALS = credentials('github-creds')
+        DOCKERHUB_CREDENTIALS = credentials('dockerhub-creds')
         REPO_URL = "https://github.com/<your-username>/alx-backend-python.git"
+        IMAGE_NAME = "<your-dockerhub-username>/messaging_app"
     }
 
     stages {
 
         stage('Checkout Code') {
             steps {
-                echo "🔹 Checking out code from GitHub..."
+                echo "🔹 Checking out code..."
                 git branch: 'main',
                     credentialsId: 'github-creds',
                     url: "${REPO_URL}"
@@ -19,7 +21,7 @@ pipeline {
 
         stage('Set Up Python Environment') {
             steps {
-                echo "🔹 Setting up Python environment..."
+                echo "🔹 Installing Python dependencies..."
                 sh '''
                     pip3 install --upgrade pip
                     pip3 install pytest pytest-html
@@ -30,25 +32,53 @@ pipeline {
 
         stage('Run Tests') {
             steps {
-                echo "🔹 Running tests with pytest..."
+                echo "🔹 Running pytest..."
                 sh '''
                     cd messaging_app
-                    pytest --html=report.html --self-contained-html || echo "Tests completed with warnings"
+                    pytest --html=report.html --self-contained-html || echo "Tests finished with warnings"
                 '''
             }
         }
 
         stage('Archive Test Report') {
             steps {
-                echo "🔹 Archiving test report..."
+                echo "🔹 Archiving pytest report..."
                 archiveArtifacts artifacts: 'messaging_app/report.html', fingerprint: true
+            }
+        }
+
+        stage('Build Docker Image') {
+            steps {
+                echo "🐳 Building Docker image..."
+                sh '''
+                    docker build -t ${IMAGE_NAME}:latest -f messaging_app/Dockerfile .
+                '''
+            }
+        }
+
+        stage('Login to Docker Hub') {
+            steps {
+                echo "🔐 Logging into Docker Hub..."
+                sh '''
+                    echo "${DOCKERHUB_CREDENTIALS_PSW}" | docker login \
+                        -u "${DOCKERHUB_CREDENTIALS_USR}" --password-stdin
+                '''
+            }
+        }
+
+        stage('Push Docker Image') {
+            steps {
+                echo "📤 Pushing Docker image to Docker Hub..."
+                sh '''
+                    docker push ${IMAGE_NAME}:latest
+                '''
             }
         }
     }
 
     post {
         always {
-            echo "✅ Jenkins pipeline completed successfully."
+            echo "✅ Pipeline Finished."
         }
     }
 }
