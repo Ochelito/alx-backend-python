@@ -1,0 +1,53 @@
+pipeline {
+    agent any
+
+    environment {
+        GITHUB_CREDENTIALS = credentials('github-creds')
+        REPO_URL = "https://github.com/<your-username>/alx-backend-python.git"
+    }
+
+    stages {
+
+        stage('Checkout Code') {
+            steps {
+                git branch: 'main',
+                    credentialsId: 'github-creds',
+                    url: "${REPO_URL}"
+            }
+        }
+
+        stage('Set Up Python Environment') {
+            steps {
+                // ShiningPanda Python virtualenv
+                withPythonEnv('/usr/bin/python3') {
+                    sh '''
+                        pip install --upgrade pip
+                        pip install pytest pytest-html
+                        pip install -r messaging_app/requirements.txt
+                    '''
+                }
+            }
+        }
+
+        stage('Run Tests') {
+            steps {
+                sh '''
+                    cd messaging_app
+                    pytest --html=report.html --self-contained-html
+                '''
+            }
+        }
+
+        stage('Archive Test Report') {
+            steps {
+                archiveArtifacts artifacts: 'messaging_app/report.html', fingerprint: true
+            }
+        }
+    }
+
+    post {
+        always {
+            echo "Pipeline completed."
+        }
+    }
+}
