@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+
+echo "=== APPLYING ROLLING UPDATE ==="
+kubectl apply -f blue_deployment.yaml
+
+echo "=== CHECKING ROLLOUT STATUS ==="
+kubectl rollout status deployment/messaging-app-blue
+
+echo "=== STARTING CONTINUOUS REQUEST TEST ==="
+echo "Testing for downtime... Press CTRL+C to stop."
+
+# Replace with your Minikube IP or service URL
+SERVICE_IP=$(minikube ip)
+URL="http://$SERVICE_IP/api/"
+
+while true; do
+    RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" "$URL")
+    echo "Response: $RESPONSE"
+    sleep 1
+done &
+
+TEST_PID=$!
+
+echo "Waiting for rollout to finish..."
+kubectl rollout status deployment/messaging-app-blue
+
+echo "=== ROLLOUT COMPLETED ==="
+echo "Current pods:"
+kubectl get pods -o wide
+
+echo "Stopping curl test..."
+kill $TEST_PID
